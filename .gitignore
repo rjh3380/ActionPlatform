@@ -11,3 +11,6 @@ logs/
 # Local configuration (may contain secrets like WebHook)
 appsettings.Local.json
 appsettings.Development.json
+
+# Temporary data analysis files
+.ap_tmp/
