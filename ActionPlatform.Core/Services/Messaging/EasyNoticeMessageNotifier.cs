@@ -36,18 +36,21 @@ public sealed class EasyNoticeMessageNotifier : IMessageNotifier
 
         foreach (var provider in _dingtalkProviders)
         {
+            LogBeforeSend("钉钉", title, content);
             var response = await provider.SendMarkdownAsync(title, content);
             LogIfFailed("钉钉", response.IsSuccess, response.ErrCode, response.ErrMsg);
         }
 
         foreach (var provider in _weixinProviders)
         {
+            LogBeforeSend("企业微信", title, content);
             var response = await provider.SendMarkdownMessageAsync(title, content);
             LogIfFailed("企业微信", response.IsSuccess, response.ErrCode, response.ErrMsg);
         }
 
         foreach (var provider in _feishuProviders)
         {
+            LogBeforeSend("飞书", title, content);
             // Workaround: EasyNotice.Feishu 2.1.4 的 SendAsync(title, message) 存在 bug，
             // 消息内容只取 title 参数（new TextMessage(title, ...)），message 被忽略，
             // 因此将标题与内容拼接后作为第一个参数传入。
@@ -69,5 +72,10 @@ public sealed class EasyNoticeMessageNotifier : IMessageNotifier
         {
             _logger.LogWarning("{Channel} 消息发送失败。ErrCode: {ErrCode}, ErrMsg: {ErrMsg}", channel, errCode, errMsg);
         }
+    }
+
+    private void LogBeforeSend(string channel, string title, string content)
+    {
+        _logger.LogInformation("{Channel} 即将发送消息。Title: {title}, Content: {content}", channel, title, content);
     }
 }
