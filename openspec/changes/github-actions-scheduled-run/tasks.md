@@ -14,3 +14,4 @@
 - [ ] 2.3 确认 job 成功：飞书收到运行通知（配置了真实 hook 时），Actions 页面显示成功
 - [ ] 2.4 下载日志 artifact，确认日志内容符合 `nlog.config` 布局且不包含 WebHook 密钥
 - [ ] 2.5 验证未配置 Secrets 的路径（临时删除 Secrets 或新分支空配置）:程序警告后正常退出、job 不失败
+- [x] 2.6 修复日志上传路径：NLog 相对路径基于 `AppDomain.BaseDirectory`（`bin/Debug/net8.0/logs/`）而非工作目录，upload-artifact 的 path 改为 glob `ActionPlatform/**/logs/`（含注释说明）
