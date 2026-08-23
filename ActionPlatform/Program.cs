@@ -1,3 +1,4 @@
+using ActionPlatform.Actions;
 using ActionPlatform.Core.Services;
 using ActionPlatform.Core.Services.Logging;
 using ActionPlatform.Core.Services.Messaging;
@@ -14,7 +15,7 @@ internal static class Program
     {
         try
         {
-            ServiceManager.InitService(typeof(App));
+            ServiceManager.InitService(typeof(App), typeof(IntervalLogAction), typeof(AuctionTopPushAction), typeof(AuctionThreePickAction));
             var app = ServiceManager.GetRequiredService<App>();
             await app.RunAsync();
         }

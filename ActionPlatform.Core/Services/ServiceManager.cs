@@ -1,4 +1,5 @@
-﻿using ActionPlatform.Core.Services.Logging;
+﻿using ActionPlatform.Core.Services.Actions;
+using ActionPlatform.Core.Services.Logging;
 using ActionPlatform.Core.Services.Messaging;
 using ActionPlatform.Core.Services.StockData;
 using Microsoft.Extensions.Configuration;
@@ -22,10 +23,16 @@ namespace ActionPlatform.Core.Services
             var sc = new ServiceCollection()
                 .AddLoggingService()
                 .AddMessagingService(configuration)
-                .AddStockDataService(configuration);
+                .AddStockDataService(configuration)
+                .AddActionLoop();
             foreach (var type in types)
             {
                 sc.AddTransient(type);
+                // Action 子类同时注册为 ActionBase 单例，供 ActionLoop 通过 IEnumerable<ActionBase> 收集
+                if (type != typeof(ActionBase) && typeof(ActionBase).IsAssignableFrom(type))
+                {
+                    sc.AddSingleton(typeof(ActionBase), type);
+                }
             }
             _serviceProvider = sc.BuildServiceProvider();
         }
