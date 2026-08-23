@@ -35,8 +35,26 @@ internal sealed class App
         await _actionLoop.StartAsync(CancellationToken.None);
         _logger.LogInformation("Action 调度循环已启动，按任意键退出...");
 
-        // 阻塞保持进程存活，让调度循环持续运行（退出前停止循环）
-        Console.ReadKey();
+        // 阻塞保持进程存活，让调度循环持续运行（退出前停止循环）。
+        // 非交互环境（CI/输入重定向）：不能使用 Console.ReadKey（无控制台时抛 InvalidOperationException），
+        // 改为按 APP_RUN_SECONDS 运行指定秒数后退出（0/缺省 = 持续运行直到进程被外部终止）。
+        if (Console.IsInputRedirected)
+        {
+            var runSeconds = int.TryParse(Environment.GetEnvironmentVariable("APP_RUN_SECONDS"), out var s) ? s : 0;
+            if (runSeconds > 0)
+            {
+                _logger.LogInformation("非交互环境运行：{Seconds} 秒后自动退出", runSeconds);
+                await Task.Delay(TimeSpan.FromSeconds(runSeconds));
+            }
+            else
+            {
+                await Task.Delay(Timeout.Infinite);
+            }
+        }
+        else
+        {
+            Console.ReadKey();
+        }
 
         await _actionLoop.StopAsync();
         _logger.LogInformation("Action 调度循环已停止，应用退出");

@@ -6,7 +6,7 @@ ActionPlatform 是 .NET 8 控制台应用（`ActionPlatform` 入口 + `ActionPla
 
 **Goals:**
 
-- GitHub Actions 工作流每天定时运行 ActionPlatform（北京时间 07:15）
+- GitHub Actions 工作流每天定时运行 ActionPlatform（北京时间 09:00，持续 1 小时）
 - 支持手动触发（workflow_dispatch）便于测试
 - 飞书 WebHook 密钥通过 GitHub Secrets 注入，不在仓库与日志中泄露
 - 运行日志可下载排查（artifact）
@@ -21,9 +21,9 @@ ActionPlatform 是 .NET 8 控制台应用（`ActionPlatform` 入口 + `ActionPla
 
 ## Decisions
 
-### D1: cron 时间取 UTC 23:15（北京时间 07:15），避开整点
+### D1: cron 时间取 UTC 01:00（北京时间 09:00）
 
-GitHub Actions cron 固定使用 UTC。北京时间 07:15 = UTC 23:15（UTC+8），避开 :00/:30 整点分钟（官方建议错峰，避免 runner 排队）。schedule 不保证精确秒级，分钟级足够。
+GitHub Actions cron 固定使用 UTC。北京时间 09:00 = UTC 01:00（UTC+8）。用户指定 9 点整启动：09:00 启动、持续 1 小时（`APP_RUN_SECONDS: 3600`）覆盖 09:25 三一票触发点。schedule 不保证精确秒级，分钟级足够。
 
 - 备选：UTC 00:00 整点 —— 易与全球大量 job 撞车排队。
 
@@ -63,5 +63,5 @@ runner 每次全新 checkout，需 restore NuGet 依赖；`dotnet run` 一站式
 
 ## Open Questions
 
-- 定时时间是否满足业务（默认北京 07:15，改 cron 一行即可）。
+- 定时时间是否满足业务（当前北京 09:00 起持续 1 小时，改 cron 与 APP_RUN_SECONDS 即可）。
 - 是否需要在失败时额外通知（如 GitHub 邮件通知已默认按仓库配置发送；程序内部业务通知由既有 IMessageNotifier 负责）。

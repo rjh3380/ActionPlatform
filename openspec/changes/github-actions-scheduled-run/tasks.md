@@ -1,6 +1,6 @@
 ## 1. GitHub Actions 工作流
 
-- [x] 1.1 创建 `.github/workflows/scheduled-run.yml`：`schedule` cron `23 15 * * *`（UTC，北京时间 07:15）+ `workflow_dispatch` 手动触发
+- [x] 1.1 创建 `.github/workflows/scheduled-run.yml`：`schedule` cron `0 1 * * *`（UTC，北京时间 09:00）+ `workflow_dispatch` 手动触发
 - [x] 1.2 配置 job：`ubuntu-latest`、`actions/checkout@v4`、`actions/setup-dotnet@v4`（dotnet-version 8.0.x）
 - [x] 1.3 添加 Secrets 注入步骤：bash 脚本根据 `${{ secrets.FEISHU_WEBHOOK }}` / `${{ secrets.FEISHU_SECRET }}` 生成 `ActionPlatform/appsettings.Local.json`；WebHook 为空时生成 `Enable: false` 配置（不泄露密钥内容）
 - [x] 1.4 添加运行步骤：`dotnet run`（working-directory: ActionPlatform，CWD 与本地一致，日志写入 `logs/`）
@@ -15,3 +15,5 @@
 - [ ] 2.4 下载日志 artifact，确认日志内容符合 `nlog.config` 布局且不包含 WebHook 密钥
 - [ ] 2.5 验证未配置 Secrets 的路径（临时删除 Secrets 或新分支空配置）:程序警告后正常退出、job 不失败
 - [x] 2.6 修复日志上传路径：NLog 相对路径基于 `AppDomain.BaseDirectory`（`bin/Debug/net8.0/logs/`）而非工作目录，upload-artifact 的 path 改为 glob `ActionPlatform/**/logs/`（含注释说明）
+- [x] 2.7 修复 CI 崩溃（首次 workflow_dispatch 实测发现）：`App.RunAsync` 的 `Console.ReadKey()` 在无控制台/输入重定向时抛 `InvalidOperationException` → 改为 `Console.IsInputRedirected` 分支：交互终端按任意键退出，非交互环境按 `APP_RUN_SECONDS`（0/缺省=持续运行）运行后退出
+- [x] 2.8 workflow 注入 `FinancialApi:ApiKey`（新 secret `FINANCIAL_API_KEY`，未配置时数据类 Action 报 2001 被隔离、程序不崩溃）；Run 步骤设置 `APP_RUN_SECONDS: 3600`（09:00 启动、持续 1 小时覆盖 09:25 三一票触发点）

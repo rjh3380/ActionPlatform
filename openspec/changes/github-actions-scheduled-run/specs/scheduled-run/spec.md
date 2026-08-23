@@ -2,7 +2,7 @@
 
 ### Requirement: 定时调度
 
-系统 SHALL 提供 GitHub Actions 工作流，按 cron 每天定时运行一次（UTC 23:15，即北京时间 07:15），并支持 workflow_dispatch 手动触发。
+系统 SHALL 提供 GitHub Actions 工作流，按 cron 每天定时运行一次（UTC 01:00，即北京时间 09:00），并支持 workflow_dispatch 手动触发。
 
 #### Scenario: 定时触发运行
 
@@ -16,21 +16,36 @@
 
 ### Requirement: 构建并运行程序
 
-工作流 SHALL 检出代码、安装 .NET 8 SDK、构建并运行 ActionPlatform 程序。
+工作流 SHALL 检出代码、安装 .NET 8 SDK、构建并运行 ActionPlatform 程序。工作流 SHALL 设置 `APP_RUN_SECONDS` 环境变量（3600，即 09:00 启动后持续运行 1 小时，覆盖 09:25 三一票触发点）；程序在无交互环境（输入重定向）下按该时长运行后正常退出，不得使用控制台按键等待（CI 无交互终端）。
 
 #### Scenario: 工作流执行程序
 
 - **WHEN** 工作流 job 开始执行
 - **THEN** 依次完成 checkout、setup-dotnet（.NET 8）、构建 ActionPlatform，并以程序退出码决定 job 成败
 
+#### Scenario: 无交互环境运行时长
+
+- **WHEN** 程序在 CI（输入重定向）环境启动且设置了 `APP_RUN_SECONDS`
+- **THEN** 程序持续运行该时长后正常退出（退出码 0），期间 Action 调度循环正常工作
+
+#### Scenario: 交互环境按键退出
+
+- **WHEN** 程序在本地交互终端启动
+- **THEN** 程序持续运行，按任意键后停止 Action 调度循环并退出
+
 ### Requirement: Secrets 密钥注入
 
-工作流 SHALL 从 GitHub Secrets（FEISHU_WEBHOOK、FEISHU_SECRET）读取渠道配置并生成 appsettings.Local.json；Secrets 为空时生成禁用渠道的配置，程序正常运行。
+工作流 SHALL 从 GitHub Secrets（FEISHU_WEBHOOK、FEISHU_SECRET、FINANCIAL_API_KEY）读取渠道与数据服务配置并生成 appsettings.Local.json；Secrets 为空时生成对应禁用/空值配置，程序正常运行（数据类 Action 报 2001 被隔离，不崩溃）。
 
 #### Scenario: 已配置 Secrets
 
 - **WHEN** 仓库 Secrets 包含 FEISHU_WEBHOOK 且非空
 - **THEN** runner 生成 appsettings.Local.json，飞书渠道 Enable=true 并写入 WebHook/Secret，程序发送消息到飞书
+
+#### Scenario: 已配置数据服务 Key
+
+- **WHEN** 仓库 Secrets 包含 FINANCIAL_API_KEY
+- **THEN** runner 生成 appsettings.Local.json 并写入 FinancialApi:ApiKey，数据类 Action（如三一票）可正常调用同花顺服务
 
 #### Scenario: 未配置 Secrets
 
