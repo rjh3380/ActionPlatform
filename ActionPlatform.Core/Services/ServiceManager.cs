@@ -1,0 +1,38 @@
+﻿using ActionPlatform.Core.Services.Logging;
+using ActionPlatform.Core.Services.Messaging;
+using ActionPlatform.Core.Services.StockData;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+
+namespace ActionPlatform.Core.Services
+{
+    public static class ServiceManager
+    {
+        static ServiceProvider _serviceProvider;
+
+        public static void InitService(params IEnumerable<Type> types)
+        {
+            var configuration = new ConfigurationBuilder()
+                .SetBasePath(AppContext.BaseDirectory)
+                .AddJsonFile("appsettings.json", optional: true, reloadOnChange: false)
+                .AddJsonFile("appsettings.Local.json", optional: true, reloadOnChange: false)
+                .Build();
+
+            // 2. 构建 IOC 容器并装配基础服务
+            var sc = new ServiceCollection()
+                .AddLoggingService()
+                .AddMessagingService(configuration)
+                .AddStockDataService(configuration);
+            foreach (var type in types)
+            {
+                sc.AddTransient(type);
+            }
+            _serviceProvider = sc.BuildServiceProvider();
+        }
+
+        public static T GetRequiredService<T>() where T : class
+        {
+            return _serviceProvider.GetRequiredService<T>() as T;
+        }
+    }
+}

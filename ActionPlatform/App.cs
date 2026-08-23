@@ -1,4 +1,6 @@
+using ActionPlatform.Core.Services;
 using ActionPlatform.Core.Services.Messaging;
+using ActionPlatform.Core.Services.StockData;
 using Microsoft.Extensions.Logging;
 
 namespace ActionPlatform;
@@ -25,6 +27,9 @@ internal sealed class App
         _logger.LogDebug("这是一条 Debug 日志，不应出现在日志文件中");
 
         await _notifier.SendAsync("ActionPlatform 启动通知", "IOC / 日志 / 消息服务已就绪。", CancellationToken.None);
+
+        var _stockData = ServiceManager.GetRequiredService<IStockDataService>();
+        var res = await _stockData.GetAuctionSnapshotAsync("601872.SH");
 
         _logger.LogInformation("演示消息处理完成，应用即将退出");
     }
