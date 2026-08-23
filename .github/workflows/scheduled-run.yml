@@ -1,0 +1,67 @@
+# ActionPlatform 每日定时运行
+#
+# - schedule: 每天北京时间 07:15 运行（GitHub Actions cron 使用 UTC，23:15 UTC = 07:15 UTC+8）
+# - workflow_dispatch: 支持手动触发，便于测试
+#
+# 需要先在仓库 Settings → Secrets and variables → Actions 中配置：
+#   FEISHU_WEBHOOK  - 飞书机器人 WebHook（未配置时渠道禁用，程序仍正常退出）
+#   FEISHU_SECRET   - 飞书加签密钥（无签名可留空/不配置）
+#
+# 密钥通过 runner 动态生成 appsettings.Local.json（已被 .gitignore 排除，不会入库）。
+
+name: Scheduled Run
+
+on:
+  schedule:
+    - cron: '23 15 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Generate local settings from secrets
+        shell: bash
+        env:
+          FEISHU_WEBHOOK: ${{ secrets.FEISHU_WEBHOOK }}
+          FEISHU_SECRET: ${{ secrets.FEISHU_SECRET }}
+        run: |
+          if [ -n "$FEISHU_WEBHOOK" ]; then
+            ENABLE="true"
+          else
+            ENABLE="false"
+          fi
+          cat > ActionPlatform/appsettings.Local.json <<EOF
+          {
+            "EasyNotice": {
+              "Feishu": {
+                "Enable": ${ENABLE},
+                "WebHook": "${FEISHU_WEBHOOK}",
+                "Secret": "${FEISHU_SECRET}"
+              }
+            }
+          }
+          EOF
+
+      - name: Run ActionPlatform
+        working-directory: ActionPlatform
+        run: dotnet run --project ActionPlatform.csproj
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: actionplatform-logs
+          path: ActionPlatform/logs/
+          retention-days: 7

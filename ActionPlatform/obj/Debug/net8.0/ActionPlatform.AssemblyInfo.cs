@@ -14,7 +14,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("ActionPlatform")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+c8cba656481d677efb33328fb1d74e9236becc39")]
 [assembly: System.Reflection.AssemblyProductAttribute("ActionPlatform")]
 [assembly: System.Reflection.AssemblyTitleAttribute("ActionPlatform")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

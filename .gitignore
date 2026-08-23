@@ -1,2 +1,13 @@
 /.vs
 /.claude
+
+# Build output
+bin/
+obj/
+
+# Runtime artifacts
+logs/
+
+# Local configuration (may contain secrets like WebHook)
+appsettings.Local.json
+appsettings.Development.json
