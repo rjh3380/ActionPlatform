@@ -58,10 +58,12 @@ jobs:
         working-directory: ActionPlatform
         run: dotnet run --project ActionPlatform.csproj
 
+      # 注意：NLog 相对路径基于 AppDomain.BaseDirectory（bin/Debug/net8.0/），
+      # 因此日志实际落在 ActionPlatform/bin/Debug/net8.0/logs/，用 glob 匹配。
       - name: Upload logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: actionplatform-logs
-          path: ActionPlatform/logs/
+          path: ActionPlatform/**/logs/
           retention-days: 7
