@@ -12,17 +12,20 @@ public sealed class EasyNoticeMessageNotifier : IMessageNotifier
     private readonly IReadOnlyList<IDingtalkProvider> _dingtalkProviders;
     private readonly IReadOnlyList<IWeixinProvider> _weixinProviders;
     private readonly IReadOnlyList<IFeishuProvider> _feishuProviders;
+    private readonly FeishuPostSender _feishuPostSender;
     private readonly ILogger<EasyNoticeMessageNotifier> _logger;
 
     public EasyNoticeMessageNotifier(
         IEnumerable<IDingtalkProvider> dingtalkProviders,
         IEnumerable<IWeixinProvider> weixinProviders,
         IEnumerable<IFeishuProvider> feishuProviders,
+        FeishuPostSender feishuPostSender,
         ILogger<EasyNoticeMessageNotifier> logger)
     {
         _dingtalkProviders = dingtalkProviders.ToArray();
         _weixinProviders = weixinProviders.ToArray();
         _feishuProviders = feishuProviders.ToArray();
+        _feishuPostSender = feishuPostSender;
         _logger = logger;
     }
 
@@ -64,6 +67,34 @@ public sealed class EasyNoticeMessageNotifier : IMessageNotifier
     {
         // 注意：EasyNotice 发送接口不支持取消，cancellationToken 保留用于接口契约一致。
         await SendAsync(title, exception.ToString(), cancellationToken);
+    }
+
+    public async Task SendRichTextAsync(string title, IReadOnlyList<RichTextLine> lines, CancellationToken cancellationToken = default)
+    {
+        if (_dingtalkProviders.Count == 0 && _weixinProviders.Count == 0 && _feishuProviders.Count == 0)
+        {
+            _logger.LogWarning("未启用任何消息渠道，消息未发送。Title: {Title}", title);
+            return;
+        }
+
+        // 飞书：post 富文本直发（手机端逐行渲染、不换行；EasyNotice.Feishu 仅支持 text）
+        await _feishuPostSender.SendPostAsync(title, lines, cancellationToken);
+
+        // 钉钉/企业微信：不支持富文本，降级为文本（片段按顺序拼接）走既有发送路径
+        var text = string.Join(Environment.NewLine, lines.Select(l => string.Concat(l.Segments.Select(s => s.Text))));
+        foreach (var provider in _dingtalkProviders)
+        {
+            LogBeforeSend("钉钉", title, text);
+            var response = await provider.SendMarkdownAsync(title, text);
+            LogIfFailed("钉钉", response.IsSuccess, response.ErrCode, response.ErrMsg);
+        }
+
+        foreach (var provider in _weixinProviders)
+        {
+            LogBeforeSend("企业微信", title, text);
+            var response = await provider.SendMarkdownMessageAsync(title, text);
+            LogIfFailed("企业微信", response.IsSuccess, response.ErrCode, response.ErrMsg);
+        }
     }
 
     private void LogIfFailed(string channel, bool isSuccess, int errCode, string errMsg)

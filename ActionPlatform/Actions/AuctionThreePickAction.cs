@@ -49,10 +49,41 @@ public sealed class AuctionThreePickAction : ActionBase
             return;
         }
 
-        var table = BuildTable(picks);
-        _logger.LogInformation("[{ActionName}] 选出 {Count} 只，推送消息", Name, picks.Count);
-        await _notifier.SendAsync("集合竞价三一票（09:25）", table, ct);
+        var lines = BuildPostLines(picks);
+        _logger.LogInformation("[{ActionName}] 选出 {Count} 只，推送富文本消息", Name, picks.Count);
+        await _notifier.SendRichTextAsync("集合竞价三一票（09:25）", lines, ct);
     }
+
+    /// <summary>
+    /// 组装飞书富文本卡片：每只票一个块（🥇🥈🥉 排名 + 4 行字段），手机端逐行渲染不换行。
+    /// 名称/代码/得分标记加粗（当前飞书 webhook 不支持 text 加粗样式，序列化层忽略；
+    /// 模型保留标记，未来支持加粗的渠道可直接生效）；无行业数据（上游未提供）时不渲染行业行。
+    /// </summary>
+    public static IReadOnlyList<RichTextLine> BuildPostLines(IReadOnlyList<AuctionPickRank> picks)
+    {
+        var medals = new[] { "🥇", "🥈", "🥉" };
+        var lines = new List<RichTextLine>();
+        for (var i = 0; i < picks.Count; i++)
+        {
+            var rank = picks[i];
+            var s = rank.Stock;
+
+            lines.Add(RichTextLine.Mixed(
+                new RichTextSegment($"{medals[i]} {i + 1}. ", Bold: true),
+                new RichTextSegment($"{s.Thscode} {s.Name}", Bold: true),
+                new RichTextSegment($"    得分 {rank.Score:F3}", Bold: true)));
+            lines.Add(RichTextLine.Plain($"现价 {s.LastPrice:F2} ｜ 竞价金额 {FormatAmount(s.AuctionAmount)}"));
+            lines.Add(RichTextLine.Plain($"实际换手 {s.AuctionTurnoverPct:F2}% ｜ 竞价涨幅 {s.AuctionPct:F2}%"));
+            lines.Add(RichTextLine.Plain($"流通市值 {FormatCap(s.FloatMarketCap)}"));
+            lines.Add(RichTextLine.Empty);
+        }
+        return lines;
+    }
+
+    private static string FormatAmount(decimal amount) =>
+        amount >= 1_0000_0000m
+            ? (amount / 1_0000_0000m).ToString("F2") + "亿"
+            : amount.ToString("N0");
 
     /// <summary>
     /// 综合评分取前 count 只：竞价金额、流通市值各占 50%。
@@ -127,10 +158,10 @@ public sealed class AuctionThreePickAction : ActionBase
             var displayWidth = value.Sum(c => c > 0x7F ? 2 : 1);
             return value + new string(' ', Math.Max(0, width - displayWidth));
         }
-
-        static string FormatCap(decimal cap) =>
-            cap >= 1_0000_0000_0000m
-                ? (cap / 1_0000_0000_0000m).ToString("F2") + "万亿"
-                : (cap / 1_0000_0000m).ToString("F2") + "亿";
     }
+
+    private static string FormatCap(decimal cap) =>
+        cap >= 1_0000_0000_0000m
+            ? (cap / 1_0000_0000_0000m).ToString("F2") + "万亿"
+            : (cap / 1_0000_0000m).ToString("F2") + "亿";
 }

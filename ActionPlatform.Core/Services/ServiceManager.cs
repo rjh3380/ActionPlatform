@@ -19,8 +19,9 @@ namespace ActionPlatform.Core.Services
                 .AddJsonFile("appsettings.Local.json", optional: true, reloadOnChange: false)
                 .Build();
 
-            // 2. 构建 IOC 容器并装配基础服务
+            // 2. 构建 IOC 容器并装配基础服务（configuration 注册进容器，供构造注入的服务按需读取）
             var sc = new ServiceCollection()
+                .AddSingleton<IConfiguration>(configuration)
                 .AddLoggingService()
                 .AddMessagingService(configuration)
                 .AddStockDataService(configuration)

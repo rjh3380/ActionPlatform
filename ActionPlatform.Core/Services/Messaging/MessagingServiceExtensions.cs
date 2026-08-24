@@ -39,6 +39,7 @@ public static class MessagingServiceExtensions
             }
         });
 
+        services.AddSingleton<FeishuPostSender>();
         services.AddSingleton<IMessageNotifier, EasyNoticeMessageNotifier>();
         return services;
     }
