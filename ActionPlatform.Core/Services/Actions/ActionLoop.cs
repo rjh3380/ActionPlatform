@@ -59,6 +59,13 @@ public sealed class ActionLoop
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(_cts.Token, ct);
         var token = linked.Token;
         _logger.LogInformation("ActionLoop 已启动：共 {ActionCount} 个 Action，轮询间隔 {PollInterval}", _actions.Count, _pollInterval);
+        foreach (var action in _actions)
+        {
+            var trigger = action.TriggerMode == TriggerMode.Interval
+                ? $"间隔 {action.Interval.TotalMilliseconds:0}ms"
+                : $"每日 {action.ScheduledTime:HH\\:mm}（北京时间）";
+            _logger.LogInformation("Action [{ActionName}]：{Enabled}，{Trigger}", action.Name, action.IsEnabled ? "已启用" : "已禁用", trigger);
+        }
 
         while (!token.IsCancellationRequested)
         {

@@ -4,15 +4,16 @@
 TBD - created by archiving change action-framework. Update Purpose after archive.
 ## Requirements
 ### Requirement: Action 基类与触发模式
-系统 SHALL 提供 `ActionBase` 抽象基类，统一封装 Action 的启用状态（`IsEnabled`）、触发模式与执行状态。系统 SHALL 支持两种触发模式：间隔触发（每间隔指定毫秒数触发一次）与每日定时触发（每天本地时区指定时刻触发一次，当天只触发一次）。基类 SHALL 提供判断方法（`CanExecuteAsync`，默认按触发模式完成判断）与干活方法（`ExecuteAsync`，子类必须实现），子类 SHALL 可重写判断方法以叠加业务条件。基类 SHALL 维护上次执行时间与执行中标志，执行中不参与触发判断。
+系统 SHALL 提供 `ActionBase` 抽象基类，统一封装 Action 的启用状态（`IsEnabled`）、触发模式与执行状态。系统 SHALL 支持两种触发模式：间隔触发（每间隔指定毫秒数触发一次）与每日定时触发（每天北京时间（UTC+8）指定时刻触发一次，当天只触发一次）。基类 SHALL 提供判断方法（`CanExecuteAsync`，默认按触发模式完成判断）与干活方法（`ExecuteAsync`，子类必须实现），子类 SHALL 可重写判断方法以叠加业务条件。基类 SHALL 维护上次执行时间与执行中标志，执行中不参与触发判断。
 
 #### Scenario: 间隔触发判断
 - **WHEN** 间隔模式 Action 距离上次执行已超过其间隔时长
 - **THEN** 判断方法返回可执行，执行完成后更新上次执行时间；未到间隔时长时判断方法返回不可执行
 
 #### Scenario: 每日定时触发判断
-- **WHEN** 定时模式 Action 的本地时间到达指定时刻且当日尚未执行过
+- **WHEN** 定时模式 Action 的北京时间到达指定时刻且当日尚未执行过
 - **THEN** 判断方法返回可执行，当日不再重复触发；跨天（次日）再次到达指定时刻时重新可执行
+- **NOTE** 定时时刻统一按北京时间（UTC+8，固定偏移，不依赖运行主机时区）：GitHub Actions runner 本地时区为 UTC，若按主机本地时间判断，09:25 之类的定时在 CI 中会错位到 17:25 才触发
 
 #### Scenario: 子类重写判断方法
 - **WHEN** 子类重写 `CanExecuteAsync`，先调用基类默认判断并叠加业务条件（如仅交易日执行）

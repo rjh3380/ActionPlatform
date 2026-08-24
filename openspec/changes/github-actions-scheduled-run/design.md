@@ -21,11 +21,16 @@ ActionPlatform 是 .NET 8 控制台应用（`ActionPlatform` 入口 + `ActionPla
 
 ## Decisions
 
-### D1: cron 时间取 UTC 01:00（北京时间 09:00）
+### D1: cron 时间取 UTC 00:00（北京时间 08:00），提前 1 小时容忍 GitHub 调度延迟
 
-GitHub Actions cron 固定使用 UTC。北京时间 09:00 = UTC 01:00（UTC+8）。用户指定 9 点整启动：09:00 启动、持续 1 小时（`APP_RUN_SECONDS: 3600`）覆盖 09:25 三一票触发点。schedule 不保证精确秒级，分钟级足够。
+GitHub Actions cron 固定使用 UTC，且文档明确 schedule 可能延迟数小时（实测 2026-08-24 延迟 74 分钟：01:00 UTC 的 job 实际 02:14 UTC 才启动，错过 09:25 竞价）。因此 cron 取 UTC 00:00（北京 08:00）启动，`APP_RUN_SECONDS: 7200`（2 小时）：零延迟时 08:00→10:00、延迟 1 小时时 09:00→11:00，均覆盖 09:25 三一票触发点（旧配置 09:00 启动 + 1 小时在零延迟时会提前退出）。
 
-- 备选：UTC 00:00 整点 —— 易与全球大量 job 撞车排队。
+- 备选：UTC 01:00 整点 —— 实测延迟 74 分钟后 10:14 才启动，错过 09:25 竞价，不可接受。
+- 备选：更早的 cron —— 延迟更久时仍会错过；GitHub 免费额度限制不宜无限加长运行窗口，2 小时为当前合理值。
+
+### D1b: Action 定时判断统一按北京时间（UTC+8），不依赖主机时区
+
+GitHub runner 本地时区为 UTC。`ActionBase` 定时判断若用 `now.LocalDateTime`，09:25（北京）在 CI 中要到 UTC 09:25（北京 17:25）才触发，三一票在 CI 永不触发（2026-08-24 实测：手动 dispatch 北京 09:49 启动，三一票未执行）。修复：`ActionBase` 定时判断改为 `ChinaTime`（固定 UTC+8 偏移，中国无夏令时）换算北京时间；本地（东八区）与 CI（UTC）行为一致。间隔模式基于时间差，与主机时区无关，不受影响。
 
 ### D2: 密钥注入用「runner 生成 appsettings.Local.json」，程序零改动
 

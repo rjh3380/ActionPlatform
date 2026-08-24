@@ -2,7 +2,7 @@
 
 ### Requirement: 定时调度
 
-系统 SHALL 提供 GitHub Actions 工作流，按 cron 每天定时运行一次（UTC 01:00，即北京时间 09:00），并支持 workflow_dispatch 手动触发。
+系统 SHALL 提供 GitHub Actions 工作流，按 cron 每天定时运行一次（UTC 00:00，即北京时间 08:00；提前 1 小时以容忍 GitHub schedule 延迟——实测延迟达 74 分钟），并支持 workflow_dispatch 手动触发。
 
 #### Scenario: 定时触发运行
 
@@ -16,7 +16,7 @@
 
 ### Requirement: 构建并运行程序
 
-工作流 SHALL 检出代码、安装 .NET 8 SDK、构建并运行 ActionPlatform 程序。工作流 SHALL 设置 `APP_RUN_SECONDS` 环境变量（3600，即 09:00 启动后持续运行 1 小时，覆盖 09:25 三一票触发点）；程序在无交互环境（输入重定向）下按该时长运行后正常退出，不得使用控制台按键等待（CI 无交互终端）。
+工作流 SHALL 检出代码、安装 .NET 8 SDK、构建并运行 ActionPlatform 程序。工作流 SHALL 设置 `APP_RUN_SECONDS` 环境变量（7200，即 08:00 启动后持续运行 2 小时——零延迟时 08:00→10:00、延迟 1 小时时 09:00→11:00，均覆盖 09:25 三一票触发点）；程序在无交互环境（输入重定向）下按该时长运行后正常退出，不得使用控制台按键等待（CI 无交互终端）。Action 定时判断 SHALL 统一按北京时间（UTC+8）进行（runner 本地时区为 UTC，按主机本地时间判断会导致 09:25 定时错位到 17:25）。
 
 #### Scenario: 工作流执行程序
 

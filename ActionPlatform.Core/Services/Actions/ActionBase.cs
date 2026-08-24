@@ -1,5 +1,20 @@
 namespace ActionPlatform.Core.Services.Actions;
 
+/// <summary>北京时间偏移（A 股交易时间的基准时区，UTC+8，中国无夏令时）。</summary>
+public static class ChinaTime
+{
+    private static readonly TimeSpan Offset = TimeSpan.FromHours(8);
+
+    /// <summary>任意时刻 → 北京时间（UTC+8，固定偏移，不依赖运行主机时区）。</summary>
+    public static DateTime ToBeijing(DateTimeOffset t) => t.UtcDateTime + Offset;
+
+    /// <summary>任意时刻的北京时间时刻（TimeOnly）。</summary>
+    public static TimeOnly ToBeijingTimeOnly(DateTimeOffset t) => TimeOnly.FromDateTime(ToBeijing(t));
+
+    /// <summary>任意时刻的北京日期（DateOnly）。</summary>
+    public static DateOnly ToBeijingDate(DateTimeOffset t) => DateOnly.FromDateTime(ToBeijing(t));
+}
+
 /// <summary>
 /// Action 抽象基类：统一封装触发模式与执行状态。
 /// 调度循环 <see cref="ActionLoop"/> 轮询所有已注册 Action，先调用判断方法 <see cref="CanExecuteAsync"/>，
@@ -32,6 +47,8 @@ public abstract class ActionBase
 
     /// <summary>
     /// 判断方法：基类按触发模式完成默认判断，子类可重写叠加业务条件（如「仅交易日执行」）。
+    /// 定时模式统一按北京时间（UTC+8）判断：CI（GitHub Actions runner 本地时区为 UTC）与本地（东八区）行为一致，
+    /// 保证 ScheduledTime（如 09:25 集合竞价）在任何运行环境下都在同一时刻触发。
     /// </summary>
     /// <param name="now">当前时间（调度循环每轮传入）。</param>
     /// <param name="ct">取消令牌。</param>
@@ -45,12 +62,12 @@ public abstract class ActionBase
 
         var canExecute = TriggerMode switch
         {
-            // 间隔触发：距上次执行（或启动）已超过间隔时长
+            // 间隔触发：距上次执行（或启动）已超过间隔时长（时间差与主机时区无关）
             TriggerMode.Interval => now - LastTriggeredAt >= Interval,
 
-            // 每日定时：本地时刻已到指定时刻，且当日尚未执行过（LastTriggeredAt 日期 != 今天）
-            TriggerMode.Scheduled => TimeOnly.FromDateTime(now.LocalDateTime) >= ScheduledTime
-                                     && LastTriggeredAt.Date != now.Date,
+            // 每日定时：北京时间已到指定时刻，且北京日期当日尚未执行过（LastTriggeredAt 的北京日期 != 今天）
+            TriggerMode.Scheduled => ChinaTime.ToBeijingTimeOnly(now) >= ScheduledTime
+                                     && ChinaTime.ToBeijingDate(LastTriggeredAt) != ChinaTime.ToBeijingDate(now),
             _ => false,
         };
         return Task.FromResult(canExecute);

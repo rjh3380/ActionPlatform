@@ -1,6 +1,8 @@
 # ActionPlatform 每日定时运行
 #
-# - schedule: 每天北京时间 09:00 运行（GitHub Actions cron 使用 UTC，01:00 UTC = 09:00 UTC+8）
+# - schedule: 每天北京时间 08:00 启动（GitHub Actions cron 使用 UTC，00:00 UTC = 08:00 UTC+8）
+#   GitHub 文档明确 schedule 可能延迟数小时（实测曾延迟 74 分钟），因此提前 1 小时启动，
+#   配合 APP_RUN_SECONDS=7200（2 小时），即使延迟 1 小时+ 也能覆盖 09:25 集合竞价触发点。
 # - workflow_dispatch: 支持手动触发，便于测试
 #
 # 需要先在仓库 Settings → Secrets and variables → Actions 中配置：
@@ -9,12 +11,13 @@
 #   FINANCIAL_API_KEY - 同花顺 Financial-API Key（未配置时数据类 Action 报错被隔离，程序不崩溃）
 #
 # 密钥通过 runner 动态生成 appsettings.Local.json（已被 .gitignore 排除，不会入库）。
+# 注意：Action 定时判断统一按北京时间（UTC+8），与 runner 本地时区（UTC）无关。
 
 name: Scheduled Run
 
 on:
   schedule:
-    - cron: '0 1 * * *'
+    - cron: '0 0 * * *'
   workflow_dispatch:
 
 permissions:
@@ -62,9 +65,10 @@ jobs:
       - name: Run ActionPlatform
         working-directory: ActionPlatform
         # APP_RUN_SECONDS：非交互环境下程序的存活秒数。
-        # 定时任务 09:00（北京时间）启动、持续 1 小时：3600s 覆盖 09:25 三一票触发点。
+        # 08:00（北京时间）启动 + 7200s（2 小时）：零延迟时 08:00→10:00、延迟 1 小时时 09:00→11:00，
+        # 均覆盖 09:25 三一票与竞价 Top 推送触发点（09:00 起 1 小时的老配置在零延迟时会提前退出，已废弃）。
         env:
-          APP_RUN_SECONDS: 3600
+          APP_RUN_SECONDS: 7200
         run: dotnet run --project ActionPlatform.csproj
 
       # 注意：NLog 相对路径基于 AppDomain.BaseDirectory（bin/Debug/net8.0/），
