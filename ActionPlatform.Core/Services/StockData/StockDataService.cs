@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text.Json;
 using ActionPlatform.Core.Services.StockData.Models;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace ActionPlatform.Core.Services.StockData;
@@ -30,13 +31,18 @@ public class StockDataService : IStockDataService
     private const int MaxRateLimitRetries = 3;
     private const int RateLimitRetryInitialDelayMs = 2000;
 
+    /// <summary>上游瞬时超时业务错误码（5002 "Auction DataAPI timeout"，实测 09:25 竞价刚结束时出现过）：按限流同样指数退避重试。</summary>
+    private const int RetryableBusinessErrorCode = 5002;
+
     private readonly HttpClient _http;
     private readonly FinancialApiOptions _options;
+    private readonly ILogger<StockDataService> _logger;
 
-    public StockDataService(HttpClient http, IOptions<FinancialApiOptions> options)
+    public StockDataService(HttpClient http, IOptions<FinancialApiOptions> options, ILogger<StockDataService> logger)
     {
         _http = http;
         _options = options.Value;
+        _logger = logger;
     }
 
     // ---- 行情 / K 线 ----
@@ -339,7 +345,20 @@ public class StockDataService : IStockDataService
                 throw new FinancialApiException((int)response.StatusCode, $"HTTP {(int)response.StatusCode}: {json}", null);
             }
 
-            return DeserializeData<T>(json);
+            T data;
+            try
+            {
+                data = DeserializeData<T>(json);
+            }
+            catch (FinancialApiException ex) when (ex.Code == RetryableBusinessErrorCode && attempt < MaxRateLimitRetries)
+            {
+                // 上游瞬时超时（5002 Auction DataAPI timeout）：与 429 同样指数退避重试
+                _logger.LogWarning("上游数据接口瞬时超时（code={Code}），{Delay}ms 后重试。RequestId: {RequestId}", ex.Code, retryDelayMs, ex.RequestId);
+                await Task.Delay(retryDelayMs, cancellationToken).ConfigureAwait(false);
+                retryDelayMs *= 2;
+                continue;
+            }
+            return data;
         }
     }
 

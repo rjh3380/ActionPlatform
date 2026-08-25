@@ -102,10 +102,13 @@ public sealed class ActionLoop
                 try
                 {
                     await action.ExecuteAsync(token).ConfigureAwait(false);
+                    action.MarkSucceeded();
                 }
                 catch (Exception ex)
                 {
+                    // 失败不占用触发额度（每日定时当天仍可按 RetryDelay 重试），仅记录失败时间用于退避
                     _logger.LogError(ex, "Action [{ActionName}] 执行异常，已隔离", action.Name);
+                    action.MarkFailed();
                 }
                 finally
                 {
