@@ -12,8 +12,10 @@ public interface IMessageNotifier
     Task SendAsync(string title, Exception exception, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// 发送富文本消息（标题 + 行模型）到所有已启用渠道。
+    /// 发送富文本消息（标题 + 行模型）到所有已启用渠道，返回是否全部投递成功。
     /// 飞书以 post 富文本发送（手机端逐行渲染、不换行）；不支持富文本的渠道（钉钉/企业微信）降级为文本。
+    /// false = 至少一个已启用渠道投递失败（发送层不抛异常）—— 调用方（如每日推送类 Action）应据此不声明完成并按退避重试。
+    /// 未启用任何渠道视为无需投递，返回 true。
     /// </summary>
-    Task SendRichTextAsync(string title, IReadOnlyList<RichTextLine> lines, CancellationToken cancellationToken = default);
+    Task<bool> SendRichTextAsync(string title, IReadOnlyList<RichTextLine> lines, CancellationToken cancellationToken = default);
 }

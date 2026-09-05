@@ -17,12 +17,20 @@ public sealed class ActionLoop
     private readonly CancellationTokenSource _cts = new();
     private Task? _loopTask;
 
+    /// <param name="dailyFireState">跨进程日锁存储（重启链下去重用；null = 不装配，定时 Action 仅进程内去重）。装配时各 Action 从文件恢复最近完成日期。</param>
     /// <param name="pollInterval">轮询间隔（默认 100ms）。传入 null 使用默认值。</param>
-    public ActionLoop(ILogger<ActionLoop> logger, IEnumerable<ActionBase> actions, TimeSpan? pollInterval = null)
+    public ActionLoop(ILogger<ActionLoop> logger, IEnumerable<ActionBase> actions, IDailyFireStateStore? dailyFireState = null, TimeSpan? pollInterval = null)
     {
         _logger = logger;
         _actions = actions.ToArray();
         _pollInterval = pollInterval ?? DefaultPollInterval;
+        if (dailyFireState is not null)
+        {
+            foreach (var action in _actions)
+            {
+                action.AttachDailyFireState(dailyFireState);
+            }
+        }
     }
 
     /// <summary>启动常驻轮询循环；已启动时重复调用直接返回。</summary>
@@ -98,7 +106,7 @@ public sealed class ActionLoop
                     continue;
                 }
 
-                action.MarkExecuted();
+                action.MarkExecuted(now);
                 try
                 {
                     await action.ExecuteAsync(token).ConfigureAwait(false);

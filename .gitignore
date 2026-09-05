@@ -14,3 +14,7 @@ appsettings.Development.json
 
 # Temporary data analysis files
 .ap_tmp/
+
+# Cross-process daily-fire state (local runs only; GitHub Actions force-commits it to keep the chain deduped).
+# 任意 CWD 运行（VS 项目目录 / 仓库根目录 dotnet run）都不留痕
+**/.ap-state/

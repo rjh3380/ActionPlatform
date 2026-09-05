@@ -43,13 +43,26 @@ public sealed class AuctionThreePickAction : ActionBase
         var picks = RankTop(all, PickCount);
         if (picks.Count == 0)
         {
-            _logger.LogWarning("[{ActionName}] 无可评分标的（无竞价成交额且流通市值的记录）", Name);
+            // 空结果 = 当日无竞价数据（休市/节假日）的终态：标记完成避免后续班次每小时空扫全市场。
+            // 若属数据延迟（如 09:25 刚结束时上游瞬时超时），上游以业务错误码 5002 抛异常表达 → 走异常路径不置位、按 RetryDelay 补推。
+            _logger.LogWarning("[{ActionName}] 无可评分标的（无竞价成交额且流通市值的记录），标记当日完成", Name);
+            MarkDailyDone();
             return;
         }
 
         var lines = BuildPostLines(picks);
         _logger.LogInformation("[{ActionName}] 选出 {Count} 只，推送富文本消息", Name, picks.Count);
-        await _notifier.SendRichTextAsync("集合竞价三一票（09:25）", lines, ct);
+        var delivered = await _notifier.SendRichTextAsync("集合竞价三一票（09:25）", lines, ct);
+
+        if (!delivered)
+        {
+            // 投递失败（发送层只记日志不抛异常：webhook 失效/加签错误/频控/网络等）→ 不声明完成，
+            // 抛异常由调度循环按 RetryDelay 退避重试；重启链下若进程死亡则由下一班补推 —— 当天不会静默丢失
+            throw new InvalidOperationException($"[{Name}] 消息投递失败，按 RetryDelay 重试补推");
+        }
+
+        // 投递成功即「今日完成」：进程内置位（不再触发）+ 跨进程日锁（重启链下去重），基类统一处理
+        MarkDailyDone();
     }
 
     /// <summary>

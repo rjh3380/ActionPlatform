@@ -26,8 +26,11 @@ public sealed class FeishuPostSender
         _logger = logger;
     }
 
-    /// <summary>发送富文本消息到飞书（post 类型）。未启用/失败时警告并安全返回。</summary>
-    public async Task SendPostAsync(string title, IReadOnlyList<RichTextLine> lines, CancellationToken cancellationToken = default)
+    /// <summary>
+    /// 发送富文本消息到飞书（post 类型），返回是否投递成功（code == 0）。
+    /// 失败/异常只记日志不抛出，由返回值供调用方决定是否重试。
+    /// </summary>
+    public async Task<bool> SendPostAsync(string title, IReadOnlyList<RichTextLine> lines, CancellationToken cancellationToken = default)
     {
         var webHook = _configuration["EasyNotice:Feishu:WebHook"];
         var secret = _configuration["EasyNotice:Feishu:Secret"];
@@ -35,7 +38,7 @@ public sealed class FeishuPostSender
         if (string.IsNullOrWhiteSpace(webHook))
         {
             _logger.LogWarning("飞书渠道未启用或未配置 WebHook，富文本消息未发送。Title: {Title}", title);
-            return;
+            return false;
         }
 
         var timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString();
@@ -62,11 +65,14 @@ public sealed class FeishuPostSender
             {
                 var msg = doc.RootElement.TryGetProperty("msg", out var msgEl) ? msgEl.GetString() : string.Empty;
                 _logger.LogWarning("飞书 富文本消息发送失败。ErrCode: {ErrCode}, ErrMsg: {ErrMsg}", code, msg);
+                return false;
             }
+            return true;
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "飞书 富文本消息发送异常，已忽略。Title: {Title}", title);
+            return false;
         }
     }
 

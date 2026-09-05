@@ -1,9 +1,20 @@
-# ActionPlatform 每日定时运行
+# ActionPlatform「常驻错觉」自愈重启链
 #
-# - schedule: 每天北京时间 08:00 启动（GitHub Actions cron 使用 UTC，00:00 UTC = 08:00 UTC+8）
-#   GitHub 文档明确 schedule 可能延迟数小时（实测曾延迟 74 分钟），因此提前 1 小时启动，
-#   配合 APP_RUN_SECONDS=7200（2 小时），即使延迟 1 小时+ 也能覆盖 09:25 集合竞价触发点。
-# - workflow_dispatch: 支持手动触发，便于测试
+# 背景：GitHub 托管 runner 单 job 硬上限 6 小时（schedule 触发同样受限、不可调高），且 cron 触发可能延迟
+# 数小时（实测曾延迟 74 分钟），单次每日定时 + 固定运行窗口的方案脆弱。在无自托管常开机器的前提下，
+# 用「高频 schedule + 单实例 + 进程自退」模拟常驻进程：
+#
+# - schedule 每 2 小时一班（cron 用 UTC，偶数点 → 北京时间偶数点，12 班/天）。每一班是全新进程；
+#   09:25 之后启动的班次会用当日 final 竞价数据立即补推（与手动补救 run 同因），因此任何一班在
+#   [北京 04:00, 23:59] 落地都能完成任务，12 次独立机会 × 进程内失败重试 ≈ 不再依赖单次准点启动。
+# - concurrency + cancel-in-progress：新一班触发时先取消仍在跑的旧班再启动，同一时刻至多一个实例
+#   （被取消的旧班仅是等待中的空闲进程，日志无业务价值）。
+# - 进程自退：程序在「当日全部已启用定时 Action 成功」后数秒内自然退出（保证日志上传与日锁提交），
+#   APP_RUN_SECONDS=19800（5.5h，低于 6h 上限）作为硬限兜底，超时自然退出由下一班接力。
+# - 跨进程日锁：程序成功推送后写入 ActionPlatform/.ap-state/daily-fired.json（记录北京日期），
+#   本步骤强制提交入库 —— 重启后的新进程据此跳过当天已成功推送的动作（至多一次推送，at-least-once：
+#   失败/进程死亡由进程内 RetryDelay 与下一班重启自动补推）。
+# - 本 workflow 无 push 触发器，日锁 commit 不会自触发重跑（[skip ci] 双保险）。
 #
 # 需要先在仓库 Settings → Secrets and variables → Actions 中配置：
 #   FEISHU_WEBHOOK  - 飞书机器人 WebHook（未配置时渠道禁用，程序仍正常退出）
@@ -17,11 +28,19 @@ name: Scheduled Run
 
 on:
   schedule:
-    - cron: '0 0 * * *'
+    # 每偶数 UTC 小时（北京 00:00/02:00/…/22:00）启动一班；+8 换算后北京 04:00/06:00/08:00 班
+    # 均可等到 09:25 集合竞价执行，10:00 及以后的班次用当日 final 数据补推
+    - cron: '0 */2 * * *'
   workflow_dispatch:
 
+# 提交 .ap-state 日锁需要写权限（原来仅 read）
 permissions:
-  contents: read
+  contents: write
+
+# 单实例：新一班（含手动 dispatch）先取消旧班，杜绝双进程同时触发造成重复推送
+concurrency:
+  group: actionplatform-chain
+  cancel-in-progress: true
 
 jobs:
   run:
@@ -29,6 +48,11 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Configure git identity for state commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
@@ -64,15 +88,41 @@ jobs:
 
       - name: Run ActionPlatform
         working-directory: ActionPlatform
-        # APP_RUN_SECONDS：非交互环境下程序的存活秒数。
-        # 08:00（北京时间）启动 + 7200s（2 小时）：零延迟时 08:00→10:00、延迟 1 小时时 09:00→11:00，
-        # 均覆盖 09:25 三一票与竞价 Top 推送触发点（09:00 起 1 小时的老配置在零延迟时会提前退出，已废弃）。
         env:
-          APP_RUN_SECONDS: 7200
+          # 重启链硬限：5.5h（19800s）< 托管 runner 6h 上限。自然退出才能执行日志上传与日锁提交步骤；
+          # 若被下一班 cancel（仅发生在硬限未到的等待期，当日已完成时程序会提前数秒退出）。
+          APP_RUN_SECONDS: 19800
+          # 重启链每 2h 重启一班，跳过启动通知避免飞书刷屏
+          SUPPRESS_STARTUP_NOTIFY: 1
         run: dotnet run --project ActionPlatform.csproj
+
+      # 提交跨进程日锁：当日触发状态入库，下一班 checkout 即可见（去重防重复推送）。
+      # 文件被 .gitignore 排除（本地运行不留痕），此处 -f 强制提交。提交失败非致命（最坏当天重复推送一次）。
+      # 注意：push HEAD:main 会把被触发分支的 tip 快进到 main —— checkout 默认 depth=1 的浅克隆天然阻止
+      # main 落后于触发分支时的推送（远端缺对象被拒，落到非致命告警分支）；但请只从与 main 同 tip 的分支
+      # 手动 dispatch，避免误把开发分支推上 main（且 ≥09:25 的工作日 dispatch 会真实推送飞书卡片，无 dry-run）。
+      - name: Commit daily-fire state
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          STATE=ActionPlatform/.ap-state/daily-fired.json
+          if [ ! -f "$STATE" ]; then
+            echo "当日触发状态文件不存在（程序未产生新状态），跳过提交"
+            exit 0
+          fi
+          git add -f "$STATE"
+          if git diff --cached --quiet; then
+            echo "当日触发状态无变化，跳过提交"
+            exit 0
+          fi
+          git commit -m "chore: 记录 ActionPlatform 当日触发状态 [skip ci]"
+          git push "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" HEAD:main \
+            || echo "::warning::日锁状态推送失败（非致命：与远端并发提交冲突等，最坏后果为当天可能重复推送一次）"
 
       # 注意：NLog 相对路径基于 AppDomain.BaseDirectory（bin/Debug/net8.0/），
       # 因此日志实际落在 ActionPlatform/bin/Debug/net8.0/logs/，用 glob 匹配。
+      # 被 cancel-in-progress 替换的班次（等待中的空闲进程）不会执行本步骤 —— 无业务日志可保留。
       - name: Upload logs
         if: always()
         uses: actions/upload-artifact@v4

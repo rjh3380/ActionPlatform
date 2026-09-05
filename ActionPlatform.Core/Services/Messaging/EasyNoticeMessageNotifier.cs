@@ -69,16 +69,18 @@ public sealed class EasyNoticeMessageNotifier : IMessageNotifier
         await SendAsync(title, exception.ToString(), cancellationToken);
     }
 
-    public async Task SendRichTextAsync(string title, IReadOnlyList<RichTextLine> lines, CancellationToken cancellationToken = default)
+    public async Task<bool> SendRichTextAsync(string title, IReadOnlyList<RichTextLine> lines, CancellationToken cancellationToken = default)
     {
         if (_dingtalkProviders.Count == 0 && _weixinProviders.Count == 0 && _feishuProviders.Count == 0)
         {
             _logger.LogWarning("未启用任何消息渠道，消息未发送。Title: {Title}", title);
-            return;
+            return true;
         }
 
+        var allSucceeded = true;
+
         // 飞书：post 富文本直发（手机端逐行渲染、不换行；EasyNotice.Feishu 仅支持 text）
-        await _feishuPostSender.SendPostAsync(title, lines, cancellationToken);
+        allSucceeded &= await _feishuPostSender.SendPostAsync(title, lines, cancellationToken);
 
         // 钉钉/企业微信：不支持富文本，降级为文本（片段按顺序拼接）走既有发送路径
         var text = string.Join(Environment.NewLine, lines.Select(l => string.Concat(l.Segments.Select(s => s.Text))));
@@ -86,23 +88,28 @@ public sealed class EasyNoticeMessageNotifier : IMessageNotifier
         {
             LogBeforeSend("钉钉", title, text);
             var response = await provider.SendMarkdownAsync(title, text);
-            LogIfFailed("钉钉", response.IsSuccess, response.ErrCode, response.ErrMsg);
+            allSucceeded &= !LogIfFailed("钉钉", response.IsSuccess, response.ErrCode, response.ErrMsg);
         }
 
         foreach (var provider in _weixinProviders)
         {
             LogBeforeSend("企业微信", title, text);
             var response = await provider.SendMarkdownMessageAsync(title, text);
-            LogIfFailed("企业微信", response.IsSuccess, response.ErrCode, response.ErrMsg);
+            allSucceeded &= !LogIfFailed("企业微信", response.IsSuccess, response.ErrCode, response.ErrMsg);
         }
+
+        return allSucceeded;
     }
 
-    private void LogIfFailed(string channel, bool isSuccess, int errCode, string errMsg)
+    /// <summary>记录失败日志并返回是否失败（true = 该渠道投递失败），供调用方汇总整体投递结果。</summary>
+    private bool LogIfFailed(string channel, bool isSuccess, int errCode, string errMsg)
     {
         if (!isSuccess)
         {
             _logger.LogWarning("{Channel} 消息发送失败。ErrCode: {ErrCode}, ErrMsg: {ErrMsg}", channel, errCode, errMsg);
+            return true;
         }
+        return false;
     }
 
     private void LogBeforeSend(string channel, string title, string content)
