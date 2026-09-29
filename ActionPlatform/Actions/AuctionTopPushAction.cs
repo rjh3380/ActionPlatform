@@ -23,7 +23,7 @@ public sealed class AuctionTopPushAction : ActionBase
         _notifier = notifier;
         _logger = logger;
         TriggerMode = TriggerMode.Scheduled;
-        ScheduledTime = new TimeOnly(9, 25);
+        ScheduledTime = new TimeOnly(9, 25, 1);
     }
 
     public override string Name => "竞价 Top10 推送";

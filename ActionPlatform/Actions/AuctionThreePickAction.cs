@@ -30,7 +30,7 @@ public sealed class AuctionThreePickAction : ActionBase
         _notifier = notifier;
         _logger = logger;
         TriggerMode = TriggerMode.Scheduled;
-        ScheduledTime = new TimeOnly(9, 25);
+        ScheduledTime = new TimeOnly(9, 25, 1);
     }
 
     public override string Name => "集合竞价三一票";
